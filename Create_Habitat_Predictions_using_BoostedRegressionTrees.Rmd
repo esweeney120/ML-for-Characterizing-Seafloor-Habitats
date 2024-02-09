@@ -1,0 +1,450 @@
+## Using Machine Learning to Predict Shallow-water, Marine Benthic Species in Saipan Lagoon, Commonwealth of the Northern Mariana Islands
+####### By Bryan Costa and Matthew Kendall 
+####### NOAA National Ocean Service (NOS) National Centers for Coastal Ocean Science (NCCOS) Marine Spatial Ecology Division (MSE) Biogeography Branch
+
+####### This project and code base was designed and executed by NOAA NCCOS in consultation with staff from the Common Wealth of the Northern Mariana Island's (CNMI) Bureau of Environmental and Coastal Quality (BECQ), and NOAA's Pacific Island Regional Office (PIRO) in the CNMI. The work was funded by NOAA's Coral Reef Conservation Program (CRCP) and NCCOS with in-kind contributions from BECQ, PIRO, and the University of Guam. The suggested citation for this work is: Kendall, M.S., B. Costa, S. McKagan, L. Johnston, and D. Okano. 2017. Benthic Habitat Maps of Saipan Lagoon. NOAA Technical Memorandum NOS NCCOS 229. Silver Spring, MD. 77 pp. https://doi.org/10.7289/V5/TM-NOS-NCCOS-229
+
+---
+
+## Overview
+In this notebook, the user will learn how to apply a machine learning approach, called boosted regression trees (BRTs), to develop spatial predictions for marine benthic species and habitats. By the end of this learning journey, the user will be able to adapt this code to develop their own machine learning based spatial predictions.
+
+## Prerequisites
+
+Before beginning, this learning journey requires the installation of R and R Studio software, an understanding of the R programming language, and  experience working with geospatial data in R. Users would also benefit from reading about boosted regression tree models before beginning the tutorial. The following references are recommended:
+
+(1) Elith J., J.R. Leathwick, and T. Hastie. 2008. A working guide to boosted regression trees. Journal of Animal
+Ecology 77:802-81.
+(2) De'ath, G. 2007. Boosted trees for ecological modeling and prediction. Ecology 88:243-251.
+(3) Elith, J., C.H. Graham, R.P. Anderson, M. Dudik, S. Ferrier, A. Guisan, R.J. Hijmans, F. Huettmann, J.R. Leathwick, A. Lehmann, J. Li, L.G. Lohmann, B.A. Loiselle, G. Manion, C. Moritz, M. Nakamura, Y. Nakazawa, J.M. Overton, A. Townsend Peterson, S.J. Phillips, K. Richardson, R. Scachetti-Pereira, R.E. Schapire, J. Soberon, S. Williams, M.S. Wisz, and N.E. Zimmermann. 2006. Novel methods improve prediction of species' distributions from occurrence data. Ecography 29:129-151.
+
+## Targeted level
+This notebook is best suited to advanced R users.
+
+## Learning outcomes
+By the end of this learning journey, the user will be familar with the following machine learning and predictive modeling concepts: (1) boosting, (2) boostrapping, (3) boosted regression trees (BRTs), and (4) model precision/uncertainty (coefficient of variation). The user will have also gained experience using the following R packages: (1) rgdal, (2) dismo and (3) gbm among others. These concepts and tools may be applied to the users' own AI ready datasets to develop species distribution models.
+
+---
+
+## Tutorial Material
+#### Background
+
+Marine managers routinely use spatial data and maps to make decisions about the resources in their jurisdiction. These spatial datasets and maps are critical for managers to establish baselines, and detect changes overtime in the health, abundance and distribution of marine resources, including benthic habitats. In the past, benthic habitat maps were developed by visually delineating and classifying features in aerial or satellite images. This approach was time consuming and subjective. In the last decade, advances in spatial modeling techniques, including machine learning and deep learning approaches, now make it easier to standardize the process used to characterize benthic habitats. These approaches also make it easier to quantify the uncertainty and precision associated with the characterization process. Both advances in habitat map making are critical for managers in a changing climate, allowing them to better track habitat changes over time, and to better understand the error bars around those changes at broad spatial scales (10s to 1000s of kilometers). 
+
+At present, there are many different machine and deep learning approaches that are available. Here, we used boosted regression trees (BRTs) to develop benthic habitat predictions and maps. We used this modeling technique because it is flexible, robust, and compares
+favorably to other machine learning techniques (Elith et al. 2006; Elith et al. 2008, De'eath and Fabricius 2000; De'ath 2007). BRTs model complex relationships between organisms and the environment by developing many (hundreds to thousands) simple regression (tree) models. Regression trees (Breiman et al., 1984) relate a response to environmental predictors by iteratively splitting the data into two homogenous groups. These models are built in a stage-wise fashion, where existing trees are left unchanged and the variance remaining from the last tree is used to fit the next one. This stage-wise process is called boosting. A random subset of data is used to fit a model at each stage. This randomization helps improve model performance (Friedman, 2002; Elith et al., 2008). These simple models are then combined linearly to produce one final combined model (Elith et al., 2008). The fitted values in this combined model are more stable than values from an individual model, improving its overall predictive performance (Friedman, 2002; Elith et al., 2006, Elith et al., 2008).
+
+#### Basic Example
+For a basic example and explanation of regression trees, please see: https://www.youtube.com/watch?v=g9c66TUylZ4
+
+#### More Complicated Example
+For a more complex example and explanation of boosted regression trees, please see: https://www.youtube.com/watch?v=zTXVo2Kmi8Q
+
+---
+
+## R CODE
+###### In the following steps, the user will develop machine learning (boosted regression tree) models and spatial predictions for Staghorn coral (Acropora pulchra, A. muricata (formerly formosa) and A. aspera) in Saipan Lagoon, CNMI. The resulting spatial layers will depict the likelihood (% probability) that Staghorn corals are present (occur), and the precision (error bars) around those predicted probabilities.
+
+##### 1. INSTALL SOFTWARE
+###### Before beginning this step, the user will be need to install R and R Studio from https://posit.co/download/rstudio-desktop/. Once installed, the step below will install and load the required R libraries.
+```r
+# Install and load required R packages
+install.packages("dismo")
+install.packages("parallel")
+install.packages("geosphere")
+install.packages("corrplot")
+install.packages("ggplot2")
+install.packages("gbm")
+install.packages("pROC")
+install.packages("rgdal")
+install.packages("csv")
+
+library(dismo)
+library(parallel)
+library(geosphere)
+library(corrplot)
+library(ggplot2)
+library(gbm)
+library(pROC)
+library(rgdal)
+library(raster)
+library(csv)
+```
+
+##### 2. LOAD BRT MODEL TRAINING AND VALIDATION DATA
+###### This step will set up working directory, define global variables and import training data for BRT models.
+```r
+# Set working directory to root level for project
+wd <- setwd(choose.dir()) 
+
+# Sample data structure for this learning journey
+      # Data
+      #     R_Inputs
+      #        Predictors
+      #        Response
+      #             Model_Calibration
+      #     R_Outputs
+      #        Spatial_Predictions
+
+# Define global environmental values
+region <- "Saipan"  # geographic location of models 
+response_var <- "C_LC_Stag_presence"		# response variable name in training dataset
+output_name <- "C_LC_Stag_presence"	# response variable name for use in output files 
+
+# Import data frame with coordinates, response variables, and extracted environmental predictor values
+data <- read.csv(file.path("R_Inputs/Response", "TrainingPts.csv",sep=''))
+valid_data <- read.csv(file.path("R_Inputs/Response", "ValidationPts.csv",sep=''))
+```
+##### 3. LOAD BRT MODEL AND PREDICTION FUNCTIONS
+###### This step will set up the functions for developing BRT models.
+
+```r
+# Set up functions (packages: dismo, gbm, raster)
+# Function to fit BRT model with optimal number of boosting trees for a given set of model tuning parameters
+Fit.BRT.Model <- function(i) {
+  library(dismo)
+  gbm.step(data=calib_data,
+           gbm.x = which(names(calib_data) %in% predictor_set_names),
+           gbm.y = grep(response_var,names(calib_data)),
+           tree.complexity=tuning_parameters[i,3],
+           learning.rate=tuning_parameters[i,1],
+           bag.fraction=tuning_parameters[i,2],
+           n.folds=10,
+           family="bernoulli",
+           plot.main=FALSE)
+}
+
+# Function to fit BRT model with fixed number of boosting trees for a given set of model tuning parameters using a bootstrap sample of the calibration data
+Fit.BRT.Model.Fixed.Bootstrap <- function(i) {
+  library(dismo)
+  gbm.fixed(data=calib_data[bootstrap_samples[[i]],],
+            gbm.x = final_vars,
+            gbm.y = grep(response_var,names(calib_data)),
+            tree.complexity=gbm_model_step[[best]]$gbm.call$tree.complexity,
+            learning.rate=gbm_model_step[[best]]$gbm.call$learning.rate,
+            bag.fraction=gbm_model_step[[best]]$gbm.call$bag.fraction,
+            family="bernoulli",
+            n.trees=gbm_model_step[[best]]$gbm.call$best.trees)
+}
+
+# Function to generate a spatial (raster) prediction from a boosted regression tree model
+Spatial.Prediction <- function(i) {
+  library(gbm)
+  library(raster)
+  gbm_model <- gbm_bootstrap_model_final[[i]]
+  rasterOptions(tmpdir = "R_Outputs/Spatial_Predictions/temp", maxmemory = 100000000000)
+  predict(raster_stack, gbm_model, type='response', n.trees=gbm_model$gbm.call$best.trees, progress="text")
+}
+```
+##### 4. IDENTIFY AND REMOVE HIGHLY CORRELATED ENVIRONMENTAL PREDICTORS
+###### This step will identify and remove highly correlated environmental predictors. Correlated predictors should be removed to simplify the model enhancing parsimony.
+```r
+# Run correlation on all predictors (package: correplot)
+Corr_predictors <- data[,c(33:60)] # These numbers correspond to the column numbers for the predictors in the csv  
+descrCorr <- cor(Corr_predictors)
+corrplot(descrCorr, method = "circle") #plot matrix
+write.table(descrCorr,sep=",", file="R_Inputs/Response/Correlated_Predictors.csv") 
+
+# Review correlation.csv, and identity correlated predictors 
+# Here, predictors with r > 0.9 and correlated with more than 2 other predictors were removed.
+# These predictors include b02_DI_BlueRed, b04_DI_BlueYellow, b06_DI_CoastalBlueYellow, b12_DI_RedCoastalBlue_Offset
+
+# Create list of environmental predictors with highly correlated predictors removed
+predictor_set <- subset(Corr_predictors, select = -c(b02_DI_BlueRed,b04_DI_BlueYellow,b06_DI_CoastalBlueYellow,b12_DI_RedCoastalBlue_Offset)) # Remove highly correlated predictors
+predictor_set_names <- names(predictor_set)
+data <- data[ ,c("Long_UTM", "Lat_UTM", response_var, predictor_set_names)]  
+data <- data[which(!is.na(data[,response_var])),] # Remove data rows where the response variable is NA
+write.table(data,sep=",", file="R_Inputs/Response/TrainingPts_CorPredRemoved.csv")
+```
+##### 5. TUNE BRT MODEL HYPERPARAMETERS
+###### This step will iterate through hyperparameters and select the highest performing BRT model using cross validation. The BRT model with the highest percent deviance explained (PDE) is selected as the best. PDE denotes the amount of variation in the training data explained by the BRT model.
+```r
+# Prepare training data
+calib_data <- data[which(!is.na(data[,response_var])),] # Remove data rows where the response variable is NA
+dir.create(file.path("R_Inputs/Response/Model_Calibration"), showWarning=FALSE, recursive=TRUE) # Create directory for model calibration outputs
+as.csv(calib_data, file.path("R_Inputs/Response/Model_Calibration", paste(region, output_name,"_Calibration.csv"))) # Export training data to csv
+
+# Create lists of BRT model hyperparameter options
+lr <- c(0.01,0.001,0.005) 	#list of options for learning rate
+bag <- c(0.5,0.75) 		#list of options for bag fraction
+tc <- c(2,3,4,5,10,20) 		#list of options for tree complexity
+# Create a data frame of all possible combinations of tuning parameters
+tuning_parameters <- expand.grid(lr,bag,tc)	
+names(tuning_parameters) <- c("learning.rate","bag.fraction","tree.complexity")
+# Create a data frame to store BRT model tuning parameters and statistics
+model_tuning_outputs <- data.frame(mean.total.dev=rep(NA,nrow(tuning_parameters)),mean.resid.dev=rep(NA,nrow(tuning_parameters)),cv.mean.dev=rep(NA,nrow(tuning_parameters)),cv.se.dev=rep(NA,nrow(tuning_parameters)),perc.dev.expl=rep(NA,nrow(tuning_parameters)))
+# Bind to tables togther
+model_tuning_outputs <- cbind(tuning_parameters, model_tuning_outputs) 
+
+# Loop through (in parallel) all possible model tuning parameter combinations, each time fitting a BRT model with the optimal number of trees
+# Apply the function "Fit.BRT.Model" to each model tuning parameter combination
+gbm_model_step <- vector("list", nrow(tuning_parameters)) # Create vector to store boosted regression tree models for each combination of model tuning parameters
+set.seed(27) # set row number used to start model development; if left blank,  row is chosen randomly and  model results will differ
+nCPUs <- detectCores()-1 	# Detect number of processing cores for parallel processing.Always keep at least 1 CPU unused so computer does not freeze
+cl <- makeCluster(nCPUs) 
+clusterExport(cl, list("response_var", "predictor_set_names", "calib_data", "tuning_parameters")) # parallelize computation across n-1 cores
+gbm_model_step <- parLapply(cl, seq(1,nrow(tuning_parameters)), Fit.BRT.Model)  
+stopCluster(cl)
+        
+# Extract model performance statistics for each BRT model turning combination
+for (i in seq(1,nrow(tuning_parameters))) {
+  if (!is.null (gbm_model_step[[i]])){
+    model_tuning_outputs[i,4] <- gbm_model_step[[i]]$self.statistics$mean.null				# mean total deviance
+    model_tuning_outputs[i,5] <- gbm_model_step[[i]]$self.statistics$mean.resid			# mean residual deviance
+    model_tuning_outputs[i,6] <- gbm_model_step[[i]]$cv.statistics$deviance.mean		# cross-validation mean residual deviance
+    model_tuning_outputs[i,7] <- gbm_model_step[[i]]$cv.statistics$deviance.se			# cross-validation standard error residual deviance
+    model_tuning_outputs[i,8] <- ((model_tuning_outputs[i,4] - model_tuning_outputs[i,6])/model_tuning_outputs[i,4])*100 # PDE
+    } else {
+    model_tuning_outputs[i,4] <- NA
+    model_tuning_outputs[i,5] <- NA
+    model_tuning_outputs[i,6] <- NA
+    model_tuning_outputs[i,7] <- NA
+    model_tuning_outputs[i,8] <- NA
+}}
+
+noconverge <- subset(model_tuning_outputs, mean.total.dev %in% c(NA)) # Rerun iterations where model did not converge
+for (i in seq(1,nrow(noconverge))) {
+gbm_model_step[[i]] <- Fit.BRT.Model(i)
+noconverge[i,4] <- gbm_model_step[[i]]$self.statistics$mean.null				# mean total deviance
+noconverge[i,5] <- gbm_model_step[[i]]$self.statistics$mean.resid			# mean residual deviance
+noconverge[i,6] <- gbm_model_step[[i]]$cv.statistics$deviance.mean			# cross-validation mean residual deviance
+noconverge[i,7] <- gbm_model_step[[i]]$cv.statistics$deviance.se				# cross-validation standard error residual deviance
+noconverge[i,8] <- ((noconverge[i,4] - noconverge[i,6])/noconverge[i,4])*100 # Calculate percent 
+}
+
+# Add remaining model cross validation metrics to table
+model_tuning_outputs <- na.omit(model_tuning_outputs)
+model_tuning_outputs <- rbind(model_tuning_outputs, noconverge)
+model_number <- row.names(model_tuning_outputs)
+model_tuning_outputs$ModelNum <- model_number
+model_tuning_outputs <- model_tuning_outputs[order(-model_tuning_outputs$perc.dev.expl),]
+
+# Export model tuning outputs to csv file
+as.csv(model_tuning_outputs, file.path("R_Inputs/Response/Model_Calibration", paste(region,output_name,"_BRT_Model_Tuning_Outputs.csv")))
+# Save R workspace
+save(list=ls(all.names=TRUE), file=file.path("R_Outputs", paste(region,"_",output_name,"_BRT_Model_Workspace.RData", sep="")))
+View(model_tuning_outputs) # Check table to see if model iterations did not converge
+
+# Identify the optimal combination of model tuning parameters by identifying the highest performing model 
+# The highest performing model is defined as having the maximum percent deviance explained (PDE)
+# PDE denotes the amount of variation in the training data explained by the BRT model
+# A different statistic could be used to identify the optimal hyperparameters
+best <- as.numeric(model_tuning_outputs$ModelNum[(which.max(model_tuning_outputs$perc.dev.expl))])
+best_model_parameters <- model_tuning_outputs[(model_tuning_outputs$ModelNum == best), ]
+as.csv(best_model_parameters, file.path("R_Inputs/Response/Model_Calibration", paste(region,"_",output_name,"_Best_Model_Tuning_Output.csv")))
+final_vars <- (predictor_set_names)
+gbm_model_final <-  gbm_model_step[[best]] # fit best model
+print(best_model_parameters)
+```                        
+##### 6. CALCULATE BRT MODEL PRECISION
+###### This step uses boostrapping to calculate the precision of the highest performing BRT model. Bootstrapping is a data re-sampling technique for estimating the statistical precision in model predictions.
+```r
+#Using bootstrapping, fit a set of final models using the optimal model tuning parameters and simplified predictor set
+num_bootstraps <- 100 # number of spatial predictions created using bootstrapping
+
+# Create a set of bootstrap samples
+bootstrap_samples <- vector("list", num_bootstraps)
+bootstrap_samples <- lapply(1:num_bootstraps, function(i) {sample(1:nrow(calib_data), size=nrow(calib_data), replace=TRUE)})
+# Create vector to store final models
+# Using parallelization, generate a model for each bootstrap sample using the optimal model tuning parameters and simplified predictor set
+cl <- makeCluster(nCPUs)
+clusterExport(cl, list("calib_data","bootstrap_samples","gbm_model_step", "best", "response_var", "final_vars"))
+gbm_bootstrap_model_final <- parLapply(cl, seq(1,num_bootstraps), Fit.BRT.Model.Fixed.Bootstrap)
+stopCluster(cl)
+```
+##### 7. ASSESS BRT MODEL PERFORMANCE USING INDEPENDANT VALIDATION DATASET
+###### This step will calculate metrics (AUC, error, bias, MAE, RMSE, PDE and residual spatial autocorrelation) to evaluate model performance. These metrics will be calculated using independent validation data. Multiple metrics are calculated because any one metric maybe biased.
+```r
+# Calculate overall AUC, error, bias, MAE, RMSE and PDE using the independant validation data
+predValues_test <- predict(gbm_model_final, valid_data, n.trees=gbm_model_final$gbm.call$best.trees, type="response") # extract predicted (fitted) values at the validation data locations
+obsValues_test <- valid_data[,response_var]
+
+auc<- auc(roc(response=valid_data[,response_var],predictor=predValues_test))  # calculate AUC
+error <- as.data.frame(obsValues_test - predValues_test) # calculate error
+bias <- mean(obsValues_test-predValues_test, na.rm=TRUE) # calculate bias
+MAE <- mean(abs(obsValues_test-predValues_test), na.rm=TRUE) # calculate MAE
+RMSE <- sqrt(mean((obsValues_test-predValues_test)^2, na.rm=TRUE)) # calculate RMSE
+total_deviance_test <- sum((obsValues_test-mean(obsValues_test))*(obsValues_test-mean(obsValues_test))) # Calculate PDE
+residual_deviance_test <- calc.deviance(obsValues_test, predValues_test, family="gaussian", calc.mean=FALSE) 
+percent_deviance_explained_test <- ((total_deviance_test-residual_deviance_test)/total_deviance_test)*100 
+
+# Calculate spatial autocorrelation of model residuals using Moran's I test
+# Create data frame to store calibration data coordinates,  model residual values, and p values for each calculation of Moran's I
+model_residuals <- data.frame(calib_data$Long_UTM, calib_data$Lat_UTM, gbm_model_final$residuals)
+names(model_residuals) <- c("Long_UTM", "Lat_UTM","Resid")
+pt_dists <- as.matrix(dist(cbind(model_residuals$Long_UTM, model_residuals$Lat_UTM))) # Calculate distances between each pair of survey data locations	
+pt_dists_inv <- 1 / pt_dists # Convert distance matrix to an inverse distance matrix	
+# For coincident survey data locations, convert inverse distance from Inf to Zero (otherwise, calculation of Moran's I will fail)
+pt_dists_inv[is.infinite(pt_dists_inv)] <- 0
+# Calculate Moran's I autocorrelation coefficent of the model residuals and report p-value
+# Residuals are autocorrelated if if p-value > 0.05 (i.e., observed value of I is significantly different from expected value) 
+Morans_I_test <- Moran.I(model_residuals$Resid, pt_dists_inv)$p.value
+
+# Concatentate model performance metrics and export to table
+model_summary <- c(response_var,  
+                   gbm_model_final$gbm.call$tree.complexity, gbm_model_final$gbm.call$learning.rate, 
+                   gbm_model_final$gbm.call$bag.fraction, gbm_model_final$gbm.call$best.trees,
+                   percent_deviance_explained_test, auc, bias, MAE, RMSE, Morans_I_test)
+model_summary_names <- c("Response Variable", "Tree Complexity", "Learning Rate", "Bag Fraction", "Number of Trees",
+                         "Validation Percent Deviance Explained", "AUC", "Bias", "MAE", "RMSE", "Moran's I")
+model_summary_df <- data.frame(model.summary.names=model_summary_names, model_summary=model_summary)
+View(model_summary_df) # View model performance metrics calculated using using the independant validation data 
+write.table(model_summary_df, file.path("R_Outputs", paste(region,"_",output_name,"_BRT_Model_Summary.csv",sep="")), row.names=FALSE, col.names=FALSE, sep=",")
+```
+##### 8. CREATE SPATIAL PREDICTIONS USING BRT MODELS
+###### This step will apply the BRT models to the environmental predictor rasters to develop spatial predictions for Staghorn corals in Saipan. The predicions denote the likelihood (%) that Staghorn corals are present in a pixel.
+```r
+# Stack environmental predictors 
+raster_list <- list.files(file.path("R_Inputs/Predictors"), pattern="tif$") # Create a list of all predictor geotiffs
+raster_list <- raster_list[match(paste(final_vars,".tif",sep=""), raster_list)] # Subset list to include only least correlated predictors
+raster_stack <- stack(file.path("R_Inputs/Predictors", raster_list)) # Create raster stack of least correlated predictor geotiffs
+names(raster_stack)[11] <- 'b15_DI_YellowRedEdge'
+raster_predictions <- vector("list", num_bootstraps) # Create vector to store raster predictions
+
+# Create spatial predictions for Staghorn corals in Saipan
+# Parllelize processing to generate a spatial prediction for each of the final models
+# NOTE This step can take a couple hours to run. To skip, load the .RData file
+# load(file.path("R_Outputs/Saipan_C_LC_Stag_presence_BRT_Model_Workspace.RData"))
+
+cl <- makeCluster(nCPUs)
+clusterExport(cl, list("gbm_bootstrap_model_final", "raster_stack"))
+raster_predictions <- parLapply(cl, seq(1,num_bootstraps), Spatial.Prediction)
+stopCluster(cl)
+  
+# Calculate mean,  standard deviation and coefficient of variation for predictions; export to geotiff
+dir.create(file.path("R_Outputs/Spatial_Predictions"), showWarning=FALSE, recursive=TRUE) # Create directory for spatial prediction outputs
+# Calculate mean of bootstrapped predictions
+mean_raster_prediction <- stackApply(stack(raster_predictions), indices=rep(1,num_bootstraps), fun=mean, na.rm=FALSE)
+proj4string(mean_raster_prediction) <- "+proj=utm +zone=55 +ellps=GRS80 +datum=WGS84 +units=m +no_defs"
+writeRaster(mean_raster_prediction, filename=file.path("R_Outputs/Spatial_Predictions", paste(region,"_Mean_Predicted_",output_name,sep="")), format="GTiff", overwrite=TRUE)
+
+#Calculate standard deviation of bootstrapped predictions
+sd_raster_prediction <- stackApply(stack(raster_predictions), indices=rep(1,num_bootstraps), fun=sd, na.rm=FALSE)
+proj4string(sd_raster_prediction) <- "+proj=utm +zone=55 +ellps=GRS80 +datum=WGS84 +units=m +no_defs"
+writeRaster(sd_raster_prediction, filename=file.path("R_Outputs/Spatial_Predictions", paste(region,"_StdDev_Predicted_",output_name,sep="")), format="GTiff", overwrite=TRUE)
+
+# Caluclate coefficient of variation (CoV) of boostrapped predictions
+# CoV = (standard deviation / mean) *100
+Saipan_Mean_Predicted_C_LC_Stag_presence <- raster(file.path("R_Outputs/Spatial_Predictions/Saipan_Mean_Predicted_C_LC_Stag_presence.tif"))
+Saipan_StdDev_Predicted_C_LC_Stag_presence <- raster(file.path("R_Outputs/Spatial_Predictions/Saipan_StdDev_Predicted_C_LC_Stag_presence.tif"))
+Saipan_CoV_Predicted_C_LC_Stag_presence <- (Saipan_StdDev_Predicted_C_LC_Stag_presence/Saipan_Mean_Predicted_C_LC_Stag_presence)*100
+proj4string(Saipan_CoV_Predicted_C_LC_Stag_presence) <- "+proj=utm +zone=55 +ellps=GRS80 +datum=WGS84 +units=m +no_defs"
+writeRaster(Saipan_CoV_Predicted_C_LC_Stag_presence, filename=file.path("R_Outputs/Spatial_Predictions", paste(region,"_CoV_Predicted_",output_name,sep="")), format="GTiff", overwrite=TRUE)
+
+# Plot mean prediction and coefficient of variation 
+par(mfrow=c(1,2))
+plot(Saipan_Mean_Predicted_C_LC_Stag_presence, main="Prediction (Mean) Staghorn Corals", col = topo.colors(10), 
+     legend.only=FALSE, horizontal = TRUE, legend.args = list(text='Probability of Occurrence'))
+plot(raster(file.path("R_Outputs/Spatial_Predictions/Saipan_CoV_Predicted_C_LC_Stag_presence.tif")), 
+     main="Prediction (Precision) Staghorn Corals", col = heat.colors(10),legend.only=FALSE, horizontal = TRUE, 
+     legend.args = list(text='Coefficient of Variation'))
+     
+# Save R workspace
+save(list=ls(all.names=TRUE), file=file.path("R_Outputs", paste(region,"_",output_name,"_BRT_Model_Workspace.RData", sep="")))
+```
+##### 9. QUANTIFY RELATIVE IMPORTANCE OF ENVIRONMENTAL PREDICTORS IN BRT MODEL
+###### This step will calculate mean relative importance from set of final models.
+```r
+# Calculates relative influence for each bootstrap iteration
+relative_influence_df <- data.frame()
+for (i in seq(1,num_bootstraps)) {
+	relative_influence <- gbm_bootstrap_model_final[[i]]$contributions
+     	relative_influence_df <- rbind(relative_influence_df, relative_influence[final_vars,"rel.inf"])
+}
+rm(relative_influence)
+names(relative_influence_df) <- final_vars
+mean_relative_influence <- colMeans(relative_influence_df)
+relative_influence_df <- relative_influence_df[,order(mean_relative_influence, decreasing=TRUE)]
+
+filenamegbm_bootstrap_means = file.path("R_Outputs", paste(region,"_bootstrap_means",output_name,"_.txt", sep=""))
+write.table(relative_influence_df,filenamegbm_bootstrap_means,sep='\t',quote=FALSE) 
+
+# Calculate variation around iterations.  Use gbm_model_final below to plot best model result. 
+#summary(gbm_model_final)
+gbmImpcont <- gbm_model_final$contributions  ## this works
+filenamegbm = file.path("R_Outputs", paste(region,"_",output_name,"_.txt", sep=""))
+write.table(gbmImpcont,filenamegbm,sep='\t',quote=FALSE) 
+
+# Create boxplot of distribtions of relative influence by environmental predictor
+pdf(file.path("R_Outputs", paste(region,"_",output_name,"_Predictor_Importance.pdf",sep="")))
+boxplot(relative_influence_df, xlab="", ylab="Relative Contribution (%)", ylim=c(0,80), las=2)
+dev.off()
+
+# Create barplot of mean relative influence by environmental predictor
+pdf(file.path("R_Outputs", paste(region,"_",output_name,"_Mean_Predictor_Importance.pdf",sep="")))
+barplot(mean_relative_influence[order(mean_relative_influence, decreasing=TRUE)], xlab="", ylab="Mean Relative Contribution (%)", ylim=c(0,80), las=2)
+dev.off()
+
+# Save R workspace
+save(list=ls(all.names=TRUE), file=file.path("R_Outputs", paste(region,"_",output_name,"_BRT_Model_Workspace.RData", sep="")))
+     
+```
+
+---
+
+## Exercises 
+
+After completing the above exercise, users can practice theirs skills by creating spatial predictions for the remaining 19 marine benthic habitats listed in the training dataset. The name of each column in the training dataset is described in the following file: ....R_Inputs/Response/Description_of_Columns_in_Training_and_Validation_Pts.xlsx. These additional exercises will test the user's understanding of the above code, and test them on where it needs to be edited to apply it to another benthic habitat or species.
+
+## Next steps
+Once users are comfortable creating BRT models, users may also be interested in a separate learning journey (in development) focused on using boosted classification trees (BCTs) to develop classified benthic habitat maps. Classified benthic habitat maps divide the seafloor into discrete substrate and biological cover types (e.g., Sand with Seagrass, Enhalus) that commonly occur together. Please see the following publication for more detail about classified benthic habitat maps: Kendall, M.S., B. Costa, S. McKagan, L. Johnston, and D. Okano. 2017. Benthic Habitat Maps of Saipan Lagoon. NOAA Technical Memorandum NOS NCCOS 229. Silver Spring, MD. 77 pp. https://doi.org/10.7289/V5/TM-NOS-NCCOS-229
+
+## Examples in the community
+
+NOAA NCCOS's benthic habitat predictions and maps (described above) were used by the CNMI territorial government to update their Saipan Lagoon Use Management Plan (SLUMP) in 2017. The SLUMP outlines strategies and specific management actions the CNMI territorial government could take to ensure both the sustainable use and environmental quality of the lagoon. Habitat maps of the lagoon were a critical part of this process and helped inform management strateagies, such as the recommendation to establish designated motorized marine sports use areas, the need to evaluate visitor impacts to benthic species, and the goal to identify sites for potential coral restoration activities. These BRT predictions were also used to respond to and assess the damage from vessel groundings in the lagoon. For more information about the SLUMP and this process, please see: https://dcrm.gov.mp/current-projects/saipan-lagoon-use-management-planning/. In addition to the SLUMP, this code and the resulting predictions are also more broadly relevant to, and align with, the missions of other NOAA line and programmtic offices that are focused on quantifying, protecting and restoring benthic habitats. This code base could be applied by these offfices to their own AI-ready datasets, and used to inform their own targeted research questions and legislative mandates. 
+
+## Data statement
+
+The datasets used here are publicly accessible, and available for download from NOAA's National Centers for Environmental Information (NCEI): https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.nodc:0162517. Alternatively, they may also be viewed in an online map: https://maps.coastalscience.noaa.gov/biomapper/biomapper.html?id=saipan
+
+### References
+
+(1) Breiman, L., J.H. Friedman, R.A. Olshen, and C.I. Stone. 1984. Classification and regression trees. Taylor &
+Francis, Belmont, CA. 368 pp.
+
+(2) Costa B, Kendall M, McKagan S (2018) Managers, modelers, and measuring the impact of species distribution model uncertainty on marine zoning decisions. PLoS ONE 13(10): e0204569. https://doi.org/10.1371/journal.pone.0204569
+
+(3) De'ath, G. 2007. Boosted trees for ecological modeling and prediction. Ecology 88:243-251.
+
+(4) Elith, J., C.H. Graham, R.P. Anderson, M. Dudik, S. Ferrier, A. Guisan, R.J. Hijmans, F. Huettmann, J.R. Leathwick,
+A. Lehmann, J. Li, L.G. Lohmann, B.A. Loiselle, G. Manion, C. Moritz, M. Nakamura, Y. Nakazawa, J.M. Overton,
+A. Townsend Peterson, S.J. Phillips, K. Richardson, R. Scachetti-Pereira, R.E. Schapire, J. Soberon, S. Williams,
+M.S. Wisz, and N.E. Zimmermann. 2006. Novel methods improve prediction of species' distributions from
+occurrence data. Ecography 29:129-151.
+
+(5) Elith J., J.R. Leathwick, and T. Hastie. 2008. A working guide to boosted regression trees. Journal of Animal
+Ecology 77:802-81.
+
+(6) Elith, J. and Leathwick, J.R., 2009. Species distribution models: ecological explanation and prediction across space and time. Annual Review of Ecology, Evolution and Systematics, 40(1), pp.677-697.
+
+(7) Friedman, J.H. 2002. Stochastic gradient boosting. Computational Statistics and Data Analysis 38:367-378.
+
+(8) Hijmans, R.J., S. Phillips, J. Leathwick, and J. Elith. 2014. R package, dismo: Species distribution modeling.
+Software Downloaded October 2014. Software website: http://CRAN.R-project.org/package=dismo (Site
+Accessed 8 June 2016).
+
+(9) Kendall, M.S., B. Costa, S. McKagan, L. Johnston, and D. Okano. 2017. Benthic Habitat Maps of Saipan Lagoon. NOAA Technical Memorandum NOS NCCOS 229. Silver Spring, MD. 77 pp.https://doi.org/10.7289/V5/TM-NOS-NCCOS-229
+
+(10) Kuhn, M. 2016. R package, Caret: Classification and Regression Training. Software Downloaded October 2014.
+Software Website: https://cran.r-project.org/web/packages/caret/index.html (Site Accessed 22 February
+2017).
+ 
+(10) R Core Team. 2022. R: A language and environment for statistical computing (Version 4.1.1). R Foundation for Statistical Computing, Vienna, Austria. Software downloaded September 2021. Software Online: https://www.r-project.org/ (Site Accessed 6 December 2022).
+
+### Metadata Kewords
+R, dismo, gbm
+Marine science, remote sensing
+Benthic habitat mapping and characterization
+Shallow water coral reefs
+Machine learning
+
+## License
+### Software license
+The GPL license
+
+### Content/description license
+CC BY 4.0
+
+## Disclaimer
+This notebook is a scientific product and is not official communication of the National Oceanic and Atmospheric Administration, or the United States Department of Commerce. All NOAA Jupyter notebooks are provided on an 'as is' basis and the user assumes responsibility for its use. Any claims against the Department of Commerce or Department of Commerce bureaus stemming from the use of this  notebook will be governed by all applicable Federal law. Any reference to specific commercial products, processes, or services by service mark, trademark, manufacturer, or otherwise does not constitute or imply their endorsement, recommendation or favoring by the Department of Commerce. The Department of Commerce seal and logo, or the seal and logo of a DOC bureau, shall not be used in any manner to imply endorsement of any commercial product or activity by DOC or the United States Government.
+

@@ -1,0 +1,448 @@
+## Using Machine Learning to Predict Shallow-water, Marine Benthic Habitats in Saipan Lagoon, Commonwealth of the Northern Mariana Islands
+####### By Bryan Costa and Matthew Kendall 
+####### NOAA National Ocean Service (NOS) National Centers for Coastal Ocean Science (NCCOS) Marine Spatial Ecology Division (MSE) Biogeography Branch
+
+####### This project and code base was designed and executed by NOAA NCCOS in consultation with staff from the Common Wealth of the Northern Mariana Island's (CNMI) Bureau of Environmental and Coastal Quality (BECQ), and NOAA's Pacific Island Regional Office (PIRO) in the CNMI. The work was funded by NOAA's Coral Reef Conservation Program (CRCP) and NCCOS with in-kind contributions from BECQ, PIRO, and the University of Guam. The suggested citation for this work is: Kendall, M.S., B. Costa, S. McKagan, L. Johnston, and D. Okano. 2017. Benthic Habitat Maps of Saipan Lagoon. NOAA Technical Memorandum NOS NCCOS 229. Silver Spring, MD. 77 pp. https://doi.org/10.7289/V5/TM-NOS-NCCOS-229
+
+---
+
+## Overview
+In this notebook, the user will learn how to apply a machine learning approach, called boosted classification trees (BCTs), to develop classified maps depicting marine benthic substrates (e.g., sand) and biological cover types (e.g., seagrass) that commonly occur together. This learning journey builds on a previous learning journey: "Using Machine Learning to Predict Shallow-water, Marine Benthic Species in Saipan Lagoon, Commonwealth of the Northern Mariana Islands". By the end of this learning journey, the user will be able to adapt this code to develop their own classified benthic habitat maps using machine learning.
+
+## Prerequisites
+
+Before beginning, this learning journey requires the installation of R and R Studio software, an understanding of the R programming language, and  experience working with geospatial data in R. Users would also benefit from reading about boosted regression tree and boosted classification tree models before beginning the tutorial. The following references are recommended:
+
+(1) Elith J., J.R. Leathwick, and T. Hastie. 2008. A working guide to boosted regression trees. Journal of Animal
+Ecology 77:802-81.
+(2) De'ath, G. 2007. Boosted trees for ecological modeling and prediction. Ecology 88:243-251.
+(3) Elith, J., C.H. Graham, R.P. Anderson, M. Dudik, S. Ferrier, A. Guisan, R.J. Hijmans, F. Huettmann, J.R. Leathwick, A. Lehmann, J. Li, L.G. Lohmann, B.A. Loiselle, G. Manion, C. Moritz, M. Nakamura, Y. Nakazawa, J.M. Overton, A. Townsend Peterson, S.J. Phillips, K. Richardson, R. Scachetti-Pereira, R.E. Schapire, J. Soberon, S. Williams, M.S. Wisz, and N.E. Zimmermann. 2006. Novel methods improve prediction of species' distributions from occurrence data. Ecography 29:129-151.
+(4) Kuhn M. 2019. The caret Package. R software. Online: https://topepo.github.io/caret/ (Accessed 3 MAY 2023)
+
+## Targeted level
+This notebook is best suited to advanced R users.
+
+## Learning outcomes
+By the end of this learning journey, the user will be familar with the following machine learning and predictive modeling concepts: (1) hierarchical clustering, (2) boosting, (3) boostrapping, and (4)) boosted classification trees (BCTs). The user will have also gained experience using the following R packages: (1) rgdal, (2) gbm and (3) caret (https://topepo.github.io/caret/index.html). These concepts and tools may be applied to the users' own AI ready datasets to develop classified models and predictions.
+
+---
+
+## Tutorial Material
+#### Background
+
+Marine managers routinely use spatial data and maps to make decisions about the resources in their jurisdiction. These spatial datasets and maps are critical for managers to establish baselines, and detect changes overtime in the health, abundance and distribution of marine resources, including benthic habitats. In the past, benthic habitat maps were developed by visually delineating and classifying features in aerial or satellite images. This approach was time consuming and subjective. In the last decade, advances in spatial modeling techniques, including machine learning and deep learning approaches, now make it easier to standardize the process used to characterize benthic habitats. These approaches also make it easier to quantify the uncertainty and precision associated with the characterization process. Both advances in habitat map making are critical for managers in a changing climate, allowing them to better track habitat changes over time, and to better understand the error bars around those changes at broad spatial scales (10s to 1000s of kilometers). 
+
+At present, there are many different machine and deep learning approaches that are available. Here, we used boosted classification trees (BCTs) to develop a benthic habitat map. We used this modeling technique because it is flexible, robust, and compares
+favorably to other machine learning techniques (Elith et al. 2006; Elith et al. 2008, De'eath and Fabricius 2000; De'ath 2007). BCTs model complex relationships between organisms and the environment by developing many (hundreds to thousands) simple classification (tree) models. Classification trees (Breiman et al., 1984) relate a response to environmental predictors by iteratively splitting the data into two homogenous groups. These models are built in a stage-wise fashion, where existing trees are left unchanged and the variance remaining from the last tree is used to fit the next one. This stage-wise process is called boosting. A random subset of data is used to fit a model at each stage. This randomization helps improve model performance (Friedman, 2002; Elith et al., 2008). These simple models are then combined linearly to produce one final combined model (Elith et al., 2008). The fitted values in this combined model are more stable than values from an individual model, improving its overall predictive performance (Friedman, 2002; Elith et al., 2006, Elith et al., 2008).
+
+#### Basic Example
+For a basic example and explanation of classification trees, please see: https://www.youtube.com/watch?v=_L39rN6gz7Y
+
+#### More Complicated Example
+For a more complex example and explanation of boosted classification trees, please see: https://www.youtube.com/watch?v=jxuNLH5dXCs
+
+---
+
+## R CODE
+###### In the following steps, the user will develop machine learning (boosted classification tree) model and spatial prediction for benthic habitats in Saipan Lagoon, CNMI. The resulting classified map will depict the commonly co-occurring substrate and biological cover types inside the Lagoon.
+
+##### 1. INSTALL SOFTWARE
+###### Before beginning this step, the user will be need to install R and R Studio from https://posit.co/download/rstudio-desktop/. Once installed, the step below will install and load the required R libraries.
+```r
+# Install and load required R packages
+install.packages("caret")
+install.packages("gbm")
+install.packages("foreach")
+install.packages("dismo")
+install.packages("parallel")
+install.packages("geosphere")
+install.packages("ape")
+install.packages("corrplot")
+install.packages("ggplot2")
+install.packages("pROC")
+install.packages("rgdal")
+install.packages("raster")
+install.packages("doParallel")
+install.packages("plyr")
+install.packages("maptools")
+install.packages("gdata")
+install.packages("gdata")
+install.packages("rgeos")
+install.packages('tidyverse')
+install.packages('cluster')
+install.packages('factoextra')
+install.packages('dendextend')
+install.packages("dplyr")
+install.packages("magrittr")
+install.packages("terra")
+install.packages("cluster")
+install.packages("rmarkdown")
+install.packages("stats")
+install.packages("sf")
+install.packages("reshape2")
+
+library(caret) # machine learning toolbox
+library(gbm) #gradient boosting 
+library(foreach)
+library(dismo)
+library(parallel) # parallel processing
+library(geosphere)
+library(ape)
+library(corrplot)
+library(ggplot2)
+library(pROC)
+library(rgdal)
+library(raster) 
+library(doParallel)
+library(plyr)
+library(maptools)
+library(gdata)
+library(gdata)
+library(rgeos)
+library(tidyverse)  # data manipulation
+library(cluster)    # clustering algorithms
+library(factoextra) # clustering visualization
+library(dendextend) # for comparing two dendrograms
+library(dplyr)
+library(magrittr)
+library(terra)
+library(cluster)
+library(rmarkdown)
+library(stats)
+library(sf)
+library(reshape2)
+
+```r
+##### 2. LOAD BRT MODEL TRAINING AND VALIDATION DATA
+###### This step will set up working directory, define global variables and import training data for BRT models.
+```r
+
+# Set working directory to root level for project
+wd <- setwd(choose.dir()) 
+
+# Sample data structure for this learning journey
+      # Data
+      #     R_Inputs
+      #        Predictors
+      #        Response
+      #     R_Outputs
+      #        Spatial_Predictions
+
+# Define global environmental values
+region <- "Saipan"  # geographic location of models 
+response_var <- "class"		# response variable name in training dataset
+output_name <- "HabitatMap"	# response variable name for use in output files 
+
+# Import data frame with coordinates and response variables
+all_data <- read.csv(file.path("R_Inputs/Response", "AllPts.csv",sep=''))
+
+```r
+##### 3. CLUSTER BENTHIC HABITAT TYPES
+###### This step will use hierachical clustering to identify commonly co-occuring substrate and biological cover types.
+```r
+
+#Hierarchical Clustering
+#Compare cluster approaches to identify approach with strongest (closest to 1) clustering structures
+
+#Test different clustering methods
+#m <- c("average", "single", "complete", "ward", "divisive", "mcquitty", "median", "centroid")
+#names(m) <- c("average", "single", "complete", "ward", "divisive", "mcquitty", "median", "centroid")
+
+hc.avg <- agnes(all_data[ ,9:25], method = "average") #Aggolmerative custering type
+hc.single <- agnes(all_data[ ,9:25], method = "single") #Aggolmerative custering type
+hc.complete <- agnes(all_data[ ,9:25], method = "complete") #Aggolmerative custering type
+hc.ward <- agnes(all_data[ ,9:25], method = "ward") #Aggolmerative custering type
+hc.dhc <- diana(all_data[ ,9:25]) #Divisive Hierarchical Clustering
+hc.mcquitty <- hclust(dist(all_data[ ,9:25]), method="mcquitty")
+hc.mcquitty$ac <- coef.hclust(hc.mcquitty)
+
+#Compare clustering coefficients from Aggolmerative and Divisive approaches
+#Choose method with highest coefficient (i.e. closest to 1)
+co <- data.frame(c(hc.avg$ac, hc.single$ac, hc.complete$ac, hc.ward$ac, hc.dhc$dc, hc.mcquitty$ac))
+rownames(co) <- c("average", "single", "complete", "ward", "divisive", "mcquitty")
+colnames(co) <- "Coefficient"
+print(co) # Ward method has highest coefficient (i.e., 0.99)
+
+#Visualize denogram of approach with highest clustering coeffiecient (strongest clustering structures)
+n=7 # Number of desired clusters/ habitat classes
+pltree(hc.ward, cex = 0.6, hang = -1, main = "Dendrogram of approach with strongest clustering") 
+rect.hclust(hc.ward, k = n, border = 2:5) # k = number of classes
+
+#Cut tree to desired number of classes/habitat groups (i.e., commonly cooccurring substrate and cover types)
+nc = 7 #Change to desired number of classes. Set to output 7 clusters/classes
+class <- cutree(hc.ward, k=nc) #Outputs 7 clusters/classes
+class <- as.data.frame(class)
+
+#Add cluster number to original data table and export to csv
+all_data_class <- cbind(all_data, class)
+all_data_class = subset(all_data_class, select = -c(9:25)) # remove % cover columns
+write.table(all_data_class,sep=",", file="R_Inputs/Response/AllPts_clustered.csv")
+
+#Summarize % cover for each cluster and use summaries to name clusters (e.g., Sand, Bare)
+# Output table with averages to csv for analysis
+all_data <- cbind(all_data, class)
+all_data_class_sum <- all_data %>% group_by(all_data$class) %>% 
+  summarise(across(everything(), mean),
+            .groups = 'drop')  %>% 
+  as.data.frame()
+all_data_class_sum = subset(all_data_class_sum, select = -c(1:9)) # remove uncessary columns
+write.table(all_data_class_sum,sep=",", file="R_Inputs/Response/Mean_habitat_cover_by_class.csv") 
+
+# Cluster numbers are converted to habitat names by selecting 1 substrate and 
+# 1 biologcial cover type (for each cluster/class) 
+# with the # highest average % cover
+
+# For example for Class 7, the substrate type with the highest percent cover (100%) is Sand. 
+# The biological cover type with the 
+# highest percent cover (99.4%) is Seagrass (Enhalus). Therefore, class 7 is "Sand, Seagrass (Enhalus)".
+
+```r
+##### 3. PREPARING TRAINING AND VALIDATION SITES FOR MODELING
+###### This step will extract predictor values at all field sites, and split the data into training and validation subsets for modeling
+```r
+
+# Convert training and validation data into spatial object
+coordinates(all_data_class) = ~Long_m+Lat_m 
+
+# Import and stack rasters
+raster_list <- list.files(file.path("R_Inputs/Predictors"), pattern="tif$")
+raster_stack <- stack(file.path("R_Inputs/Predictors", raster_list))
+
+#Extract raster values at training and validation sites
+rasValue <- extract(raster_stack, all_data_class) #extract values from predictors at train and valid sites
+combinePointValue=cbind(all_data_class,rasValue)
+write.csv(as.data.frame(combinePointValue), file.path("R_Inputs/Response", paste("AllPts_clustered_rastervalues.csv"))) 
+
+# Split training and validation data
+train_data <- subset(as.data.frame(combinePointValue), Site_Typ == "Training" | Site_Typ == "Training Interns")
+valid_data <- subset(as.data.frame(combinePointValue), Site_Typ == "Validation")
+
+# Remove data rows where the response variable is NA
+train_data <- na.omit(train_data)
+valid_data <- na.omit(valid_data)
+
+##### Save R workspace #####
+save(list=ls(all.names=TRUE), file=file.path("R_Outputs", paste(region,"_",output_name,"_BCT_Model_Workspace.RData", sep="")))
+
+```r
+##### 4. TUNE BCT MODEL HYPERPARAMETERS
+###### This step will iterate through hyperparameters and select the highest performing BCT model using cross validation. The BCT model with the highest overall accuracy is selected as the best. PDE denotes the amount of variation in the training data explained by the BRT model.
+```r
+
+# Develop BCT models based on hyperparameter combinations
+# Separate response and predictors into two dataframes
+predictor_names =gsub(".tif","",raster_list) # Develop list of predictor variables
+TrainData <- train_data[,predictor_names] # Put predictor variables in data frame
+TrainClasses <- train_data[,response_var] # Put response variable in data frame
+TrainClasses <- as.factor(TrainClasses)
+
+# BCT hyperparameter combinations
+gbmGrid <- expand.grid(n.trees = c(500, 750, 1000, 2000, 3000),
+                       interaction.depth = c(2,5,10,20),
+                       shrinkage = c(0.01, 0.001, 0.005),
+                       n.minobsinnode = c(3, 5, 10)) 
+
+fitControl <- trainControl(trim=TRUE, method = "repeatedcv", number = 10, repeats = 10, allowParallel = TRUE, returnData = TRUE)
+
+##Develop gbm model
+## THIS STEP WILL TAKE SEVERAL HOURS, AND REQUIRE APPROXIMATELY 150 GB OF RAM!!!
+
+set.seed(28) #Set seed so can reproduce same model
+nCPUs <- detectCores()-2 	# Detect number of processing cores for parallel processing. Leave two cores unthreaded so can log on
+cl <- makeCluster(nCPUs)
+registerDoParallel(cl)
+
+ptm <- proc.time()
+
+total <- 20
+pb <- txtProgressBar(min = 0, max = total, style = 3)
+for(i in 1:total){
+gbm <- train(TrainData, TrainClasses, method = "gbm", verbose = FALSE, 
+             distribution="multinomial", 
+             tuneGrid=gbmGrid, 
+             metric="Accuracy", 
+             maximize=TRUE,
+             trControl=fitControl)
+Sys.sleep(0.1)
+setTxtProgressBar(pb, i)
+gc(reset=TRUE)
+}
+close(pb)
+stopCluster(cl)
+proc.time() - ptm
+gc(reset=TRUE)
+
+##### Save R workspace #####
+save(list=ls(all.names=TRUE), file=file.path("R_Outputs", paste(region,"_",output_name,"_BCT_Model_Workspace.RData", sep="")))
+
+# Export model statistics
+model_tuning_outputs <- gbm$results
+write.csv(model_tuning_outputs, file.path("R_Outputs", paste(region,"_",output_name,"_BCT_Model_Tuning_Outputs.csv",sep="")))
+
+# Identify the optimal combination of model tuning parameters by identifying the 
+# model with the maximum accuracy, kappa
+best_model_parameters <- gbm$bestTune
+write.csv(best_model_parameters, file.path("R_Outputs", paste(region,"_",output_name,"_BCT_Best_Model.csv",sep="")))
+
+```r                        
+##### 5. CREATE PREDICTICTED BENTHIC HABITAT MAP
+###### This step will apply the most accurate BCT model to the predictor rasters to develop a benthic habitat map. The class numbers can be translated to benthic habitat types using the "Mean_habitat_cover_by_class.csv". To convert, find the substrate and biological cover type(s) with the highest, average percent cover for each class. For this dataset, the seven classes are: Live and Dead Coral Reef Mixed Algae; Pavement Mixed Algae; Coral Rubble Mixed Algae; Sand Mixed Algae and Seagrass; Sand Seagrass (Halodule); Sand Seagrass (Enhalus); and Sand Bare.
+```r
+
+# Create raster prediction
+rast.pred <- predict(raster_stack, gbm, progress="text", type="raw")
+## Export predictions to geotiff file for use as layer in GIS
+class(rast.pred)
+proj4string(rast.pred) <- "+proj=utm +zone=55 +ellps=GRS80 +datum=WGS84 +units=m +no_defs"
+writeRaster(rast.pred, filename=file.path("R_Outputs/Spatial_Predictions", paste(region,"_Predicted_",output_name,sep="")), format="GTiff", overwrite=TRUE)
+
+##If needed, apply majority filter to raster
+## Export predictions to geotiff file for use as layer in GIS
+rast.pred.agg <- aggregate(rast.pred, fact = 3, fun = modal, na.rm = TRUE, progress="text")
+class(rast.pred.agg)
+proj4string(rast.pred.agg) <- "+proj=utm +zone=55 +ellps=GRS80 +datum=WGS84 +units=m +no_defs"
+writeRaster(rast.pred.agg, filename=file.path("R_Outputs/Spatial_Predictions", paste(region,"_Predicted_",output_name,sep="", "Majority3x3")), format="GTiff", overwrite=TRUE)
+
+par(mfrow=c(1,2))
+plot(rast.pred, main = "Habitat Map")
+plot(rast.pred.agg, main = "Habitat Map (Majority3x3)")
+
+##### Save R workspace #####
+save(list=ls(all.names=TRUE), file=file.path("R_Outputs", paste(region,"_",output_name,"_BCT_Model_Workspace.RData", sep="")))
+
+```r                        
+##### 5. ASSESS BCT MODEL ACCURACY USING INDEPENDANT VALIDATION DATASET
+###### This step will calculate users, producers and overall map accuracy to evaluate model performance. These metrics will be calculated using independent validation data. 
+```r
+
+# Format and convert validation data into spatial object
+valid_data <- subset(as.data.frame(valid_data), select = c(Long_m, Lat_m, class))
+coordinates(valid_data) = ~Long_m+Lat_m
+
+#### Choose one method from two methods described below:
+#### Method 1 : Calculate map accuracy using most common predicted habitat class inside a buffer.
+#### If the most commonly occuring predicted class occurrs inside the buffer, then the validation site is marked as correct.
+
+# Extract values from predicted surface at validation data locations 
+d <- 4 #Add a buffer around validation sites to account for positional uncertainty of source imagery and/or GPS
+gbm.cm <- extract(rast.pred, valid_data, method="simple", sp=TRUE, fun = modal, buffer = d)
+gbm.cm <- as.data.frame(gbm.cm)
+colnames(gbm.cm)[3] <-"ObsClass" #change column names
+colnames(gbm.cm)[4]<-"PredClass" #change column names
+gbm.cm <- subset(gbm.cm, select = c(ObsClass, PredClass))
+
+#Create confustion matrix
+cm <- confusionMatrix(data = factor(gbm.cm$PredClass), reference = factor(gbm.cm$ObsClass), mode = "everything")
+cm.table <- as.table(cm)
+print(cm)
+
+#### Method 2: Calculate map accuracy using all predicted habitat classes inside a buffer.
+#### If a predicted class occurs inside the buffer, then the validation site is labeled as correct.
+
+# Extract values from predicted surface at validation data locations
+d <- 4 #Add a buffer around validation sites to account for positional uncertainty of source imagery and/or GPS
+aa.extract <- extract(rast.pred, valid_data, method="simple", small=TRUE, buffer = d, na.rm = TRUE)
+aa <- as.data.frame(valid_data)
+  aa$Site <- row.names(aa)
+  colnames(aa)[3] <-"ObsClass" #change column names
+
+# Summarise predicted classes withing buffer
+aa.pred <- melt(aa.extract)
+  colnames(aa.pred)[1] <-"PredClass" #change column names
+  colnames(aa.pred)[2]<-"Site" #change column names
+
+# Match observed and predicted classes (1 = match; 0 = mismatch)
+aa.merge <- merge(aa, aa.pred, by = "Site")
+aa.group <- aa.merge %>%
+     group_by(Site) %>%
+     mutate(Match = ifelse(ObsClass %in% PredClass, 1, 0))
+aa.pred.group <- aa.group %>% group_by(Site) %>% summarise(modal(PredClass))
+  colnames(aa.pred.group)[2]<-"PredClass" #change column names
+aa.sum <- aa.group %>% group_by(Site) %>% summarise(max(Match))
+
+aa.cm <- merge(aa, aa.sum, by = "Site")
+aa.cm$PredClass <- ifelse(aa.cm$`max(Match)` == 1, aa.cm$ObsClass, 0)
+aa.cm$PredClass <- ifelse(aa.cm$`max(Match)` == 0, aa.pred.group$PredClass, aa.cm$ObsClass)
+
+#Create confustion matrix
+aa.cm.factor <- subset(aa.cm, select = c(ObsClass, PredClass))
+aa.cm.factor <- na.omit(aa.cm.factor)
+cm <- confusionMatrix(data = factor(aa.cm.factor$PredClass), reference = factor(aa.cm.factor$ObsClass), mode = "everything")
+cm.table <- as.table(cm)
+print(cm)
+
+#####################################################################
+#Export confusion matrix and accuracy metrics to files
+capture.output(cm, file = "BCT_Map_Accuracy.csv")
+write.table(cm.table, file.path(paste("BCT_Confusion_Matrix.csv",sep="")), row.names=TRUE, col.names=TRUE, sep=",")
+
+
+```r
+---
+
+## Exercises 
+
+After completing the above exercise, users can practice theirs skills by creating benthic habitat maps with different numbers of classes. The number of classes can be changed during Step 3: Cluster Benthic Habitats. These additional exercises will test the user's understanding of the above code, and test them on where it needs to be edited.
+
+## Next steps
+Once users are comfortable creating BRT models, users may also be interested in a separate learning journey (in development) focused on using boosted classification trees (BCTs) to develop classified benthic habitat maps. Classified benthic habitat maps divide the seafloor into discrete substrate and biological cover types (e.g., Sand with Seagrass, Enhalus) that commonly occur together. Please see the following publication for more detail about classified benthic habitat maps: Kendall, M.S., B. Costa, S. McKagan, L. Johnston, and D. Okano. 2017. Benthic Habitat Maps of Saipan Lagoon. NOAA Technical Memorandum NOS NCCOS 229. Silver Spring, MD. 77 pp. https://doi.org/10.7289/V5/TM-NOS-NCCOS-229
+
+## Examples in the community
+
+NOAA NCCOS's benthic habitat predictions and maps (described above) were used by the CNMI territorial government to update their Saipan Lagoon Use Management Plan (SLUMP) in 2017. The SLUMP outlines strategies and specific management actions the CNMI territorial government could take to ensure both the sustainable use and environmental quality of the lagoon. Habitat maps of the lagoon were a critical part of this process and helped inform management strateagies, such as the recommendation to establish designated motorized marine sports use areas, the need to evaluate visitor impacts to benthic species, and the goal to identify sites for potential coral restoration activities. These BRT predictions were also used to respond to and assess the damage from vessel groundings in the lagoon. For more information about the SLUMP and this process, please see: https://dcrm.gov.mp/current-projects/saipan-lagoon-use-management-planning/. In addition to the SLUMP, this code and the resulting predictions are also more broadly relevant to, and align with, the missions of other NOAA line and programmtic offices that are focused on quantifying, protecting and restoring benthic habitats. This code base could be applied by these offfices to their own AI-ready datasets, and used to inform their own targeted research questions and legislative mandates. 
+
+## Data statement
+
+The datasets used here are publicly accessible, and available for download from NOAA's National Centers for Environmental Information (NCEI): https://www.ncei.noaa.gov/access/metadata/landing-page/bin/iso?id=gov.noaa.nodc:0162517. Alternatively, they may also be viewed in an online map: https://maps.coastalscience.noaa.gov/biomapper/biomapper.html?id=saipan
+
+### References
+
+(1) Breiman, L., J.H. Friedman, R.A. Olshen, and C.I. Stone. 1984. Classification and regression trees. Taylor &
+Francis, Belmont, CA. 368 pp.
+
+(2) Costa B, Kendall M, McKagan S (2018) Managers, modelers, and measuring the impact of species distribution model uncertainty on marine zoning decisions. PLoS ONE 13(10): e0204569. https://doi.org/10.1371/journal.pone.0204569
+
+(3) De'ath, G. 2007. Boosted trees for ecological modeling and prediction. Ecology 88:243-251.
+
+(4) Elith, J., C.H. Graham, R.P. Anderson, M. Dudik, S. Ferrier, A. Guisan, R.J. Hijmans, F. Huettmann, J.R. Leathwick,
+A. Lehmann, J. Li, L.G. Lohmann, B.A. Loiselle, G. Manion, C. Moritz, M. Nakamura, Y. Nakazawa, J.M. Overton,
+A. Townsend Peterson, S.J. Phillips, K. Richardson, R. Scachetti-Pereira, R.E. Schapire, J. Soberon, S. Williams,
+M.S. Wisz, and N.E. Zimmermann. 2006. Novel methods improve prediction of species' distributions from
+occurrence data. Ecography 29:129-151.
+
+(5) Elith J., J.R. Leathwick, and T. Hastie. 2008. A working guide to boosted regression trees. Journal of Animal
+Ecology 77:802-81.
+
+(6) Elith, J. and Leathwick, J.R., 2009. Species distribution models: ecological explanation and prediction across space and time. Annual Review of Ecology, Evolution and Systematics, 40(1), pp.677-697.
+
+(7) Friedman, J.H. 2002. Stochastic gradient boosting. Computational Statistics and Data Analysis 38:367-378.
+
+(8) Hijmans, R.J., S. Phillips, J. Leathwick, and J. Elith. 2014. R package, dismo: Species distribution modeling.
+Software Downloaded October 2014. Software website: http://CRAN.R-project.org/package=dismo (Site
+Accessed 8 June 2016).
+
+(9) Kendall, M.S., B. Costa, S. McKagan, L. Johnston, and D. Okano. 2017. Benthic Habitat Maps of Saipan Lagoon. NOAA Technical Memorandum NOS NCCOS 229. Silver Spring, MD. 77 pp.https://doi.org/10.7289/V5/TM-NOS-NCCOS-229
+
+(10) Kuhn, M. 2016. R package, Caret: Classification and Regression Training. Software Downloaded October 2014.
+Software Website: https://cran.r-project.org/web/packages/caret/index.html (Site Accessed 22 February
+2017).
+ 
+(10) R Core Team. 2022. R: A language and environment for statistical computing (Version 4.1.1). R Foundation for Statistical Computing, Vienna, Austria. Software downloaded September 2021. Software Online: https://www.r-project.org/ (Site Accessed 6 December 2022).
+
+### Metadata Kewords
+R, dismo, gbm
+Marine science, remote sensing
+Benthic habitat mapping and characterization
+Shallow water coral reefs
+Machine learning
+
+## License
+### Software license
+The GPL license
+
+### Content/description license
+CC BY 4.0
+
+## Disclaimer
+This notebook is a scientific product and is not official communication of the National Oceanic and Atmospheric Administration, or the United States Department of Commerce. All NOAA Jupyter notebooks are provided on an 'as is' basis and the user assumes responsibility for its use. Any claims against the Department of Commerce or Department of Commerce bureaus stemming from the use of this  notebook will be governed by all applicable Federal law. Any reference to specific commercial products, processes, or services by service mark, trademark, manufacturer, or otherwise does not constitute or imply their endorsement, recommendation or favoring by the Department of Commerce. The Department of Commerce seal and logo, or the seal and logo of a DOC bureau, shall not be used in any manner to imply endorsement of any commercial product or activity by DOC or the United States Government.
+
