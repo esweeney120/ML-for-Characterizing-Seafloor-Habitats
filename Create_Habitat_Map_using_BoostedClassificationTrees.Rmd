@@ -1,5 +1,5 @@
 ## Using Machine Learning to Predict Shallow-water, Marine Benthic Habitats in Saipan Lagoon, Commonwealth of the Northern Mariana Islands
-####### By Bryan Costa and Matthew Kendall 
+####### By Bryan Costa
 ####### NOAA National Ocean Service (NOS) National Centers for Coastal Ocean Science (NCCOS) Marine Spatial Ecology Division (MSE) Biogeography Branch
 
 ####### This project and code base was designed and executed by NOAA NCCOS in consultation with staff from the Common Wealth of the Northern Mariana Island's (CNMI) Bureau of Environmental and Coastal Quality (BECQ), and NOAA's Pacific Island Regional Office (PIRO) in the CNMI. The work was funded by NOAA's Coral Reef Conservation Program (CRCP) and NCCOS with in-kind contributions from BECQ, PIRO, and the University of Guam. The suggested citation for this work is: Kendall, M.S., B. Costa, S. McKagan, L. Johnston, and D. Okano. 2017. Benthic Habitat Maps of Saipan Lagoon. NOAA Technical Memorandum NOS NCCOS 229. Silver Spring, MD. 77 pp. https://doi.org/10.7289/V5/TM-NOS-NCCOS-229
