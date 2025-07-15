@@ -3,7 +3,6 @@ library(ggplot2)
 library(purrr)
 library(scales)
 
-
 # Overview:
 # This script reads in the results from the LWF model summary files, filters the data by habitat type,
 # and creates bar plots comparing the model performance metrics (CV PDE, Validation AUC, and Validation PDE) for each habitat type.
