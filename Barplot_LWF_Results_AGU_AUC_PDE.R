@@ -3,7 +3,6 @@ library(ggplot2)
 library(purrr)
 library(scales)
 
-# https://dk81.github.io/dkmathstats_site/rvisual-sidebyside-bar.html
 
 # Overview:
 # This script reads in the results from the LWF model summary files, filters the data by habitat type,
@@ -11,12 +10,7 @@ library(scales)
 
 ################################################################################
 
-# Set working directory to where the results are stored
-setwd("C:/Users/Edward.Sweeney/Documents/Projects/Saipan/Data/LiDAR/Waveforms/Results")
-setwd("C:/Path/To/Your/Parsed_LWF_Results")
-
-# Optional: Set working directory to where the Model Summary files are stored
-setwd("C:/Users/Edward.Sweeney/Documents/Projects/Saipan/Data/LiDAR/Waveforms/Results/Model_Summary")
+# Set working directory to where the Model Summary files are stored
 setwd("C:/Path/To/Your/Model_Summary_Files")
 
 # File Input
